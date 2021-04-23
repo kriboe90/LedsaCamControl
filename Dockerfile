@@ -22,7 +22,7 @@ RUN python3 -m pip install -r LedsaCamControl/requirements.txt
 
 # ------------- JupyterBook ------------- #
 RUN python3 -m pip install jupyterlab
-
+COPY jupyter_lab_config.py  /root/.jupyter/jupyter_lab_config.py
 EXPOSE 8888
 
 # --------------- Startup file --------------- #

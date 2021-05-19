@@ -1,0 +1,28 @@
+<h1>{{ dataset.name }}</h1>
+<ul>
+	<li>"Number of Channels:" {{dataset.channel_no}}</li>
+	<li>"Shutter Speed:" {{dataset.shutter_speed}}</li>
+	<li>"Number of Photos:" {{dataset.no_of_photos}}</li>
+</ul>
+
+
+
+
+<!--Hier fängt das Formular für einen Kalibration-Run an-->
+
+<form action="{% url 'dataset:run' dataset.id %} " method= "post">
+{% csrf_token %}
+	Kalibration ausführen <br>
+	<label for="ds_channel_no">in Channel:</label>
+	<input type="number" id="ds_channel_no" name="ds_channel_no" min="1" max={{dataset.channel_no}} ><br>
+	<input type = "submit" value="Start">
+</form>
+
+
+
+
+
+
+<ul>
+        <a href=" {%url 'dataset:index'%}"> back </a>
+</ul>

@@ -1,0 +1,26 @@
+{% if latest_set_list %}
+    <ul>
+    {% for dataset in latest_set_list %}
+        <li><a href=" {%url 'dataset:detail' dataset.id %}">{{ dataset.name }}</a></li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No datasets are available.</p>
+{% endif %}
+
+<form action="{% url 'dataset:create'%}" method= "post">
+{% csrf_token %}
+	<label for = "ds_name"> Name: </label>
+	<input type = "text" id="ds_name" name="ds_name" value="standard name"><br>
+	
+	<label for="ds_channel_no">Number of Channels:</label>
+	<input type="number" id="ds_channel_no" name="ds_channel_no" min="1" max="1000" value="3"><br>
+	
+	<label for="ds_shutter_speed">Shutter Speed:</label>
+	<input type="number" id="ds_shutter_speed" name="ds_shutter_speed" min="1" max="1000" step="0.01" value="1"><br>
+	
+	<label for="ds_photo_no">Number of Photos:</label>
+	<input type="number" id="ds_photo_no" name="ds_photo_no" min="1" max="1000" value="1"><br>
+	
+	<input type = "submit" value="Create">
+</form>

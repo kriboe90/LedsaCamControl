@@ -7,18 +7,21 @@ import matplotlib.gridspec as gridspec
 from ledsacamcontrol.camcalib import Calib
 from ledsacamcontrol.camcontrol import get_shutter_speed_list
 from ledsacamcontrol.processing import get_real_exp_time_from_file, get_channel_values_at_shutter_speed,\
-    get_shutter_speed_from_file
+    get_shutter_speed_from_file, get_channel_values_from_file
 from sklearn.linear_model import LinearRegression
 
+cm = 1 / 2.54
 
 class CamColorCalib(Calib):
-    def __init__(self, nchannels=3, shutter_speed='1/1000', local_images=False, led_name="RGB_LED"):
+    def __init__(self, nchannels=3, shutter_speed='1/1000', local_images=False, label="RGB_LED", intercept=True):
         super().__init__(nchannels=nchannels, shutter_speed=shutter_speed, local_images=local_images)
         self.saturation_correction_matrix = None
         self.integral_correction_matrix = None
         self.shutter_speed_list = get_shutter_speed_list(local_images=self.local_images)
         self.input_params_df = None
-        self.led_name = led_name
+        self.label = label
+        self.intercept = intercept
+
 
     def _get_nearest_shutter_speed(self, value):
         nearest_shutter_speed = min(self.shutter_speed_list, key=lambda x: abs(Fraction(x) - value))
@@ -62,53 +65,62 @@ class CamColorCalib(Calib):
         else:
             print(f"Initial Saturation is {max_saturation} but must be between 10% and 90%")
 
+
     def get_calibration_params(self, led_id, calib_param, channel):
         params_df = self.input_params_df[led_id, calib_param, channel].dropna(how='all')
         real_exp_time_list = np.array(self.real_exp_time_lut[params_df.index])
-        calibration_params_list = self._get_fit_params(real_exp_time_list, params_df)
+        calibration_params_list, intercept_list = self._get_fit_params(real_exp_time_list, params_df)
         params_df["real_exp_time"] = real_exp_time_list
-        return params_df, calibration_params_list
+        return params_df, calibration_params_list, intercept_list
 
     def _get_fit_params(self, real_exp_time_list, params):
         fit_params_list = []
+        intercept_list = []
         for channel in params:
             rel_saturation_list = params[channel]
-            model = LinearRegression(fit_intercept=False)
+            model = LinearRegression(fit_intercept=self.intercept)
             model.fit(real_exp_time_list.reshape(-1, 1), rel_saturation_list)
             fit_param = model.coef_[0]
+            intercept = model.intercept_
             fit_params_list.append(fit_param)
-        return fit_params_list
+            intercept_list.append(intercept)
+        return fit_params_list, intercept_list
 
     def get_color_correction_matrix(self, led_id, calib_param):
         corr = np.zeros((self.nchannels, self.nchannels))
         for channel in self.input_params_df[led_id, calib_param, 0]:
             params_df = self.input_params_df[led_id, calib_param, channel].dropna(how='all')
             real_exp_time_list = np.array(self.real_exp_time_lut[params_df.index])
-            corr[:, channel] = self._get_fit_params(real_exp_time_list, params_df)
+            corr[:, channel], _ = self._get_fit_params(real_exp_time_list, params_df)
         corr_normed = (corr / corr.max(axis=1))
         return corr_normed
 
-    def plot_calib_params(self, channels=[0], led_id=0, save=False):
+    def plot_calib_params(self, fig_width, channels=[0], led_id='all', save=False):
         nchannels = len(channels)
 
-        fig  = plt.figure(constrained_layout=True)
+        fig = plt.figure(constrained_layout=True)
         gird = gridspec.GridSpec(ncols=2, nrows=nchannels, figure=fig)
-        fig.set_size_inches(6, 3*nchannels)
+        fig.set_size_inches(fig_width * cm, 0.5 * fig_width * nchannels * cm)
 
         for i, led_channel in enumerate(channels):
-            integral_values, correction_params_integral = self.get_calibration_params(led_id, "integral", led_channel)
-            saturation_values, correction_params_saturation = self.get_calibration_params(led_id, "saturation",
-                                                                                           led_channel)
+
+            integral_values, correction_params_integral, intercept_integral = self.get_calibration_params(led_id, "integral", led_channel)
+            saturation_values, correction_params_saturation, intercept_saturation = self.get_calibration_params(led_id, "saturation", led_channel)
             ax1 = fig.add_subplot(gird[i, 0])
             ax2 = fig.add_subplot(gird[i, 1])
             for channel, color in zip(saturation_values, ['red', 'green', 'blue']):
-                first_value = saturation_values['real_exp_time'][0]
                 last_value = saturation_values['real_exp_time'][-1]
                 ax1.scatter(saturation_values['real_exp_time'], saturation_values[channel], color=color)
-                ax1.plot([0, last_value], [0, last_value * correction_params_saturation[channel]], color=color)
                 ax2.scatter(integral_values['real_exp_time'], integral_values[channel], color=color)
-                ax2.plot([0, last_value], [0, last_value * correction_params_integral[channel]], color=color,
-                           label=f"Cam Ch {channel}")
+                # ax1.scatter(saturation_values.index, saturation_values[channel], color=color, alpha=0.5)
+                # ax2.scatter(integral_values.index, integral_values[channel], color=color, alpha=0.5)
+                x = np.linspace(0, last_value)
+                y_integral = lambda x: intercept_integral[channel] + x * correction_params_integral[channel]
+                y_saturation = lambda x: intercept_saturation[channel] + x * correction_params_saturation[channel]
+                ax1.plot(x, y_saturation(x), color=color, label=f"Cam Ch {channel}")
+                ax2.plot(x, y_integral(x), color=color, label=f"Cam Ch {channel}")
+                if led_id == 'all':
+                    ax1.errorbar(saturation_values['real_exp_time'], saturation_values[channel])
                 ax2.ticklabel_format(scilimits=(0, 0), axis='y')
                 ax1.grid(True)
                 ax2.grid(True)
@@ -126,6 +138,11 @@ class CamColorCalib(Calib):
         if save == True:
             plt.savefig(f"color_correction_ch_all_led_id_{led_id}.pdf", dpi=1000, bbox_inches='tight')
 
+    def save_input_params(self):
+        rt_input_params_df = self.input_params_df
+        rt_input_params_df["real_exposure_time"] = self.real_exp_time_lut
+        rt_input_params_df.to_csv(f"{self.label}_input_params.csv")
+
     def save_cc_matrix(self, led_id='all'):
         if led_id == 'all':
             led_ids_list = range(self.nleds)
@@ -135,17 +152,18 @@ class CamColorCalib(Calib):
         for led_id in led_ids_list:
             integral_corr_matrix = self.get_color_correction_matrix(led_id, 'integral')
             saturation_corr_matrix = self.get_color_correction_matrix(led_id, 'saturation')
-            np.savetxt(f"{self.led_name}_{led_id}_integral_corr_norm.csv", integral_corr_matrix, delimiter=",")
-            np.savetxt(f"{self.led_name}_{led_id}_saturation_corr_norm.csv", saturation_corr_matrix, delimiter=",")
+            np.savetxt(f"{self.label}_{led_id}_integral_corr_norm.csv", integral_corr_matrix, delimiter=",")
+            np.savetxt(f"{self.label}_{led_id}_saturation_corr_norm.csv", saturation_corr_matrix, delimiter=",")
 
-    def plot_cc_matrix(self, led_id=0, save=False):
+    def plot_cc_matrix(self, fig_width, led_id=0, save=False):
         integral_corr_matrix = self.get_color_correction_matrix(led_id, 'integral')
         saturation_corr_matrix = self.get_color_correction_matrix(led_id, 'saturation')
 
         width = 0.3
         channels = np.arange(3)
         fig, axs = plt.subplots(ncols=2)
-        fig.set_size_inches(6, 3)
+        fig.set_size_inches(fig_width * cm, 0.5 * fig_width * cm)
+
         for ax, corr_matrix in zip(axs, [saturation_corr_matrix, integral_corr_matrix]):
             ax.yaxis.grid(True, linestyle='--', which='major', color='grey', alpha=.25)
             ax.bar(channels - width, corr_matrix[:, 0], width, color='red', label="Channel 0")
@@ -154,9 +172,9 @@ class CamColorCalib(Calib):
             ax.set_xticks([0, 1, 2])
             ax.set_xlabel("Channel")
         axs[0].set_ylabel("Dependencie")
-        axs[0].set_title("Saturation channel values")
-        axs[1].set_title("Integral channel values")
+        axs[0].set_title("Saturation ratio")
+        axs[1].set_title("Integral ratio")
         plt.legend(bbox_to_anchor=(-0.2, -0.2), loc='upper center', ncol=3)
         if save == True:
-            plt.savefig(f"color_correction_dep_{self.led_name}.pdf", dpi=1000, bbox_inches='tight')
+            plt.savefig(f"color_correction_dep_{self.label}.pdf", dpi=1000, bbox_inches='tight')
 

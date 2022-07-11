@@ -1,6 +1,11 @@
 import numpy as np
 
 def find_search_areas(image, window_radius, skip=10, threshold_factor=0.25):
+    ### Temp
+    width, height = image.shape
+    image[:, 0:int(height/3)] = 0
+    image[:, int(2/3*height):] = 0
+    ### Temp
     print('finding led search areas')
     led_mask = generate_mask_of_led_areas(image, threshold_factor)
     search_areas = find_pos_of_max_col_val_per_area(image, led_mask, skip, window_radius)
@@ -13,11 +18,13 @@ def generate_mask_of_led_areas(image, threshold_factor):
     th = threshold_factor * (im_max - im_mean)
     print("mean pixel value:", im_mean)
     print("max pixel value:", im_max)
+    print("Saturation:", im_max/ 2**14) #Todo: Remove hardcoding
     im_set = np.zeros_like(image)
     im_set[image > th] = 1
     return im_set
 
 def find_pos_of_max_col_val_per_area(image, led_mask, skip, window_radius):
+
     search_areas_list = []
     led_id = 0
     for ix in range(window_radius, image.shape[0] - window_radius, skip):

@@ -1,6 +1,6 @@
 import numpy as np
 
-def find_search_areas(image, window_radius, skip=10, threshold_factor=0.25):
+def find_search_areas_1(image, window_radius, skip, threshold_factor):
     ### Temp
     width, height = image.shape
     image[:, 0:int(height/3)] = 0
@@ -8,9 +8,11 @@ def find_search_areas(image, window_radius, skip=10, threshold_factor=0.25):
     ### Temp
     print('finding led search areas')
     led_mask = generate_mask_of_led_areas(image, threshold_factor)
-    search_areas = find_pos_of_max_col_val_per_area(image, led_mask, skip, window_radius)
-    print("\nfound {} leds".format(search_areas.shape[0]))
-    return search_areas
+    search_areas_list = find_pos_of_max_col_val_per_area(image, led_mask, skip, window_radius)
+    print("\nfound {} leds".format(len(search_areas_list)))
+    search_areas_array = np.array(search_areas_list)
+
+    return search_areas_array
 
 def generate_mask_of_led_areas(image, threshold_factor):
     im_mean = np.mean(image)
@@ -36,15 +38,13 @@ def find_pos_of_max_col_val_per_area(image, led_mask, skip, window_radius):
                 remove_led_from_mask(led_mask, ix, iy, window_radius)
 
                 print('.', end='', flush=True)
-    search_areas_array = np.array(search_areas_list)
-    return search_areas_array
+    return search_areas_list
 
-def find_led_pos(image, ix, iy, window_radius):
-    s_radius = window_radius // 2
-    s = np.index_exp[ix - s_radius:ix + s_radius, iy - s_radius:iy + s_radius]
+def find_led_pos(image, ix, iy, radius):
+    s = np.index_exp[ix - radius:ix + radius, iy - radius:iy + radius]
     res = np.unravel_index(np.argmax(image[s]), image[s].shape)
-    max_x = ix - s_radius + res[0]
-    max_y = iy - s_radius + res[1]
+    max_x = ix - radius + res[0]
+    max_y = iy - radius + res[1]
 #     max_x = ix -s_radius-5
 #     max_y = iy -s_radius*2
     return max_x, max_y

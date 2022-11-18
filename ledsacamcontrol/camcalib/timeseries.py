@@ -9,12 +9,12 @@ class TimeSeries(Calib):
         self.img_series = None
         self.img_name_string = None
 
-    def set_images_series(self, start, end, limit, skip=1):
+    def set_images_series(self, start, end, limit, skip=0):
         if end < start:
             self.img_series = list(range(start, limit + 1, skip))
             self.img_series.extend(list(range(1, end + 1, skip)))
         else:
-            self.img_series = list(range(start, end + 1, skip))
+            self.img_series = list(range(start, end + 1, 1 + skip))
 
     def set_img_name_string(self, img_name_string, img_dir='./'):
         self.img_name_string = os.path.join(img_dir, img_name_string)
@@ -30,6 +30,7 @@ class TimeSeries(Calib):
         for i in self.img_series:
             print(i, end=" ")
             file = self.img_name_string.format(i)
+            print(file)
             _, file_type = os.path.splitext(file)
             channel_saturation_list, channel_integral_list, channel_max_list, channel_mean_list, _ = get_channel_values_from_file(file, self.search_areas, self.radius)
             channel_saturation_list_all.append(pd.DataFrame(channel_saturation_list))

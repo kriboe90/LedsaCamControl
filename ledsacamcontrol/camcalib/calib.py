@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from ledsacamcontrol.camcontrol import capture_image_at_shutter_speed
-from ledsacamcontrol.processing import find_search_areas, find_search_areas_advanced, find_search_areas_advanced_2, get_channel_arrays_from_file, get_channel_arrays_from_file_txt
+from ledsacamcontrol.processing import find_search_areas_1,find_search_areas_2, get_channel_arrays_from_file, get_channel_arrays_from_file_txt
 class Calib():
     def __init__(self, nchannels=3, shutter_speed='1/1000', local_images=False):
         self.local_images = local_images
@@ -10,11 +10,11 @@ class Calib():
         self.search_areas = None
         self.radius = None
         self.nleds = None
-        self.datatype = 'CR2'
+        self.datatype = None
 
-    def find_leds(self, channel, radius, skip, threshold_factor, filename = 'find_leds'):
+    def find_leds_1(self, channel, radius, skip, threshold_factor, file ='find_leds.CR2'):
         self.radius = radius
-        file = f'{filename}.{self.datatype}'
+        self.datatype = file.split('.')[-1]
         if not self.local_images:
             capture_image_at_shutter_speed(self.init_shutter_speed, file)
         if self.datatype in ['txt', 'csv']:
@@ -26,15 +26,14 @@ class Calib():
                 channel_arrays_list = get_channel_arrays_from_file(file)
                 channel_array = channel_arrays_list[channel]
         self.init_image = channel_array
-        search_areas = find_search_areas(channel_array, window_radius=radius, skip=skip,
-                                         threshold_factor=threshold_factor)
+        search_areas = find_search_areas_1(channel_array, window_radius=radius, skip=skip,
+                                           threshold_factor=threshold_factor)
         self.search_areas = search_areas
         self.nleds = len(search_areas)
 
-
-    def find_leds_advanced(self,channel, radius, exclude_width, exclude_height, n_leds, n_strips, strip_width, filename = 'find_leds', reorder=True, z_pixel_offset=None, border_width = None):
+    def find_leds_2(self, channel, radius, max_n_leds, percentile=99.9, ignore_edge_leds=True, file = 'find_leds.CR2'):
         self.radius = radius
-        file = f'{filename}.{self.datatype}'
+        self.datatype = file.split('.')[-1]
         if not self.local_images:
             capture_image_at_shutter_speed(self.init_shutter_speed, file)
         if self.datatype in ['txt', 'csv']:
@@ -46,31 +45,9 @@ class Calib():
                 channel_arrays_list = get_channel_arrays_from_file(file)
                 channel_array = channel_arrays_list[channel]
         self.init_image = channel_array
-        search_areas = find_search_areas_advanced(channel_array, window_radius=radius, exclude_width=exclude_width, exclude_height= exclude_height, n_leds=n_leds, n_strips=n_strips, strip_width=strip_width, reorder=reorder, z_pixel_offset=z_pixel_offset, border_width=border_width)
+        search_areas = find_search_areas_2(channel_array, radius=radius, max_n_leds=max_n_leds, percentile=percentile, ignore_edge_leds=ignore_edge_leds)
         self.search_areas = search_areas
-        self.nleds =n_leds
-        if filename:
-            np.savetxt(f'{filename}.csv', self.search_areas, delimiter=',',
-                       header='LED id, pixel position x, pixel position y', fmt='%d')
-            print(f"{filename}.csv saved!")
-
-    def find_leds_advanced_2(self, radius, max_n_leds=None, percentile=99.9, filename='find_leds', z_pixel_offset=None):
-        self.radius = radius
-        file = f'{filename}.{self.datatype}'
-        if not self.local_images:
-            capture_image_at_shutter_speed(self.init_shutter_speed, file)
-        if self.datatype in ['txt', 'csv']:
-            channel_array = get_channel_arrays_from_file_txt(file)
-        else:
-            channel_array = get_channel_arrays_from_file(file, separate_channels=False)
-
-        self.init_image = channel_array
-        search_areas = find_search_areas_advanced_2(channel_array, window_radius=radius, max_n_leds=max_n_leds, percentile=percentile, z_pixel_offset=z_pixel_offset)
-        self.search_areas = search_areas
-        if filename:
-            np.savetxt(f'{filename}.csv', self.search_areas, delimiter=',',
-                       header='LED id, pixel position x, pixel position y', fmt='%d')
-            print(f"{filename}.csv saved!")
+        self.nleds = len(search_areas)
 
     def plot_ref_image(self):
         plt.imshow(self.init_image)
@@ -93,8 +70,7 @@ class Calib():
             ax.set_ylim(x_min, x_max)
             ax.set_xlim(y_min, y_max)
         if filename:
-            # plt.savefig(f"find_leds_{filename}.png")
-            plt.savefig(f"find_leds_{filename}.pdf")
+            plt.savefig(f"find_leds_{filename}.pdf", dpi=600)
 
 
     def plot_single_led(self, image, led_id, channel, max_channel_value=None):
@@ -103,7 +79,7 @@ class Calib():
         else:
             channel_arrays_list = get_channel_arrays_from_file(image)
             channel_array = channel_arrays_list[channel]
-        plt.imshow(channel_array, vmax=max_channel_value)
+        plt.imshow(channel_array, vmax=max_channel_value, cmap='viridis')
         x_min = self.search_areas[led_id][1] - self.radius
         x_max = self.search_areas[led_id][1] + self.radius
         y_min = self.search_areas[led_id][2] - self.radius
